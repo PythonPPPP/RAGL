@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  background: radial-gradient(1200px 800px at 20% 10%, rgba(59,130,246,0.18), transparent 55%),
+              radial-gradient(900px 700px at 85% 15%, rgba(16,185,129,0.12), transparent 55%),
+              linear-gradient(180deg, #0b1220 0%, #070b14 100%);
+  color: rgba(255,255,255,0.9);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+
+.react-flow__pane {
+  background: transparent;
+}
+.react-flow__controls button {
+  background: rgba(15,26,47,0.8);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.85);
+}
+.react-flow__minimap {
+  background: rgba(15,26,47,0.75);
+  border: 1px solid rgba(255,255,255,0.08);
+}

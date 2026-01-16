@@ -1,0 +1,9 @@
+@"
+.venv/
+backend/.venv/
+__pycache__/
+*.pyc
+.env
+.vscode/
+.idea/
+"@ | Out-File -Encoding utf8 .gitignore

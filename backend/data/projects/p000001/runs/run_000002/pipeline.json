@@ -1,0 +1,79 @@
+{
+  "name": "Hybrid + Rerank",
+  "description": "Hybrid dense+BM25 retrieval + reranking for higher faithfulness.",
+  "chunker": {
+    "chunk_size": 900,
+    "overlap": 120
+  },
+  "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "reranker_model": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+  "query": {
+    "mode": "none",
+    "max_queries": 3
+  },
+  "context": {
+    "max_chars": 8000
+  },
+  "guardrails": {
+    "require_citations": true,
+    "min_citations": 1
+  },
+  "retriever": {
+    "mode": "hybrid",
+    "top_k": 16,
+    "hybrid_alpha": 0.6,
+    "use_reranker": true,
+    "rerank_top_n": 6,
+    "min_score": 0.15,
+    "use_mmr": false,
+    "mmr_lambda": 0.6,
+    "mmr_k": 30
+  },
+  "generator": {
+    "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+    "temperature": 0.1,
+    "max_new_tokens": 256,
+    "top_p": 0.9,
+    "system_prompt": "Ты ассистент, отвечающий на вопросы по документам пользователя. Если ответа нет в контексте — честно скажи, что данных в документах недостаточно."
+  },
+  "ui": {
+    "nodes": {
+      "reader": {
+        "x": 120,
+        "y": 80
+      },
+      "chunker": {
+        "x": 120,
+        "y": 200
+      },
+      "embed": {
+        "x": 120,
+        "y": 320
+      },
+      "vectorstore": {
+        "x": 120,
+        "y": 440
+      },
+      "retriever": {
+        "x": 520,
+        "y": 250
+      },
+      "reranker": {
+        "x": 520,
+        "y": 470
+      },
+      "prompt": {
+        "x": 920,
+        "y": 140
+      },
+      "generator": {
+        "x": 920,
+        "y": 300
+      },
+      "guardrails": {
+        "x": 920,
+        "y": 460
+      }
+    }
+  }
+}
