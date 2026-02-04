@@ -57,10 +57,6 @@ class Run(SQLModel, table=True):
 
 
 class SharedPipeline(SQLModel, table=True):
-    """Stores shareable pipeline configurations.
-
-    The config is project-agnostic; the frontend can import it into any project.
-    """
 
     code: str = Field(primary_key=True)
     name: str = ""
