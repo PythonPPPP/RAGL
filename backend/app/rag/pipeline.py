@@ -12,21 +12,15 @@ from pydantic import ConfigDict
 
 
 class QueryConfig(BaseModel):
-    """Controls query rewriting/expansion before retrieval."""
-
     mode: str = Field(default="none", description="none|keywords|multi")
     max_queries: int = 3
 
 
 class ContextConfig(BaseModel):
-    """Controls how context is assembled."""
-
     max_chars: int = 8000
 
 
 class GuardrailsConfig(BaseModel):
-    """Lightweight post-processing / safety constraints for local runs."""
-
     require_citations: bool = True
     min_citations: int = 1
 
@@ -77,7 +71,6 @@ class PipelineConfig(BaseModel):
     name: str = "Pipeline"
     description: str = ""
     chunker: ChunkerConfig = ChunkerConfig()
-    # Defaults are intentionally multilingual-friendly.
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     query: QueryConfig = QueryConfig()
@@ -86,7 +79,6 @@ class PipelineConfig(BaseModel):
     retriever: RetrieverConfig = RetrieverConfig()
     generator: GeneratorConfig
 
-    # UI-only metadata that the backend ignores in logic.
     ui: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -102,10 +94,6 @@ def build_index_for_docs(
     docs: List[Tuple[int, str, str]],
     cfg: PipelineConfig,
 ) -> Dict[str, Any]:
-    """Build FAISS and BM25 indexes from docs.
-
-    docs: list of (doc_id, filename, text)
-    """
     chunks: List[Chunk] = []
     for doc_id, filename, text in docs:
         chunks.extend(make_chunks(doc_id, filename, text, cfg.chunker.chunk_size, cfg.chunker.overlap))
@@ -131,15 +119,12 @@ def retrieve(
     question: str,
     cfg: PipelineConfig,
 ) -> Tuple[List[RetrievedChunk], Dict[str, float]]:
-    """Retrieve chunks and return timings."""
     t = {}
     t0 = time.time()
     faiss_index, embeddings, bm25, tokenized, chunks, meta = load_indexes(index_dir)
     t["load_index"] = time.time() - t0
 
-    # --- Query enhancement ---
     def _stopwords() -> set[str]:
-        # lightweight bilingual list (en/ru) for keyword mode
         return {
             "a",
             "an",
@@ -184,7 +169,6 @@ def retrieve(
     def _keywords(q: str) -> str:
         toks = [t.lower() for t in "".join(ch if ch.isalnum() else " " for ch in q).split()]
         toks = [t for t in toks if len(t) > 2 and t not in _stopwords()]
-        # keep order, unique
         seen = set()
         out = []
         for t in toks:
@@ -205,14 +189,12 @@ def retrieve(
         queries = [q for q in candidates if q and q.strip()]
         queries = queries[: max(1, cfg.query.max_queries)]
 
-    # --- Embed (dense) queries ---
     t1 = time.time()
     qvs = embed_texts(queries, cfg.embedding_model)
     t["embed_query"] = time.time() - t1
 
     top_k = max(cfg.retriever.top_k, cfg.retriever.rerank_top_n, cfg.retriever.mmr_k)
 
-    # --- Retrieval for each query; merge by max normalized score ---
     t2 = time.time()
 
     def _minmax_norm(vals: List[float]) -> List[float]:
@@ -244,7 +226,6 @@ def retrieve(
     idxs = [i for i, _ in items]
     scores = [float(s) for _, s in items]
 
-    # Optional score filtering
     if cfg.retriever.min_score is not None:
         keep = [(i, s) for i, s in zip(idxs, scores) if s >= float(cfg.retriever.min_score)]
         idxs = [i for i, _ in keep]
@@ -252,14 +233,11 @@ def retrieve(
 
     t["retrieve"] = time.time() - t2
 
-    # Build candidate chunks
     cand_idxs = idxs[: cfg.retriever.top_k]
 
-    # Optional MMR diversification
     if cfg.retriever.use_mmr and len(cand_idxs) > 0:
         try:
             q = np.asarray(qvs[0], dtype=np.float32)
-            # Normalize
             q = q / (np.linalg.norm(q) + 1e-9)
             X = np.asarray([embeddings[i] for i in idxs[: cfg.retriever.mmr_k]], dtype=np.float32)
             X = X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
@@ -271,7 +249,6 @@ def retrieve(
             selected_set = set()
             lam = float(np.clip(cfg.retriever.mmr_lambda, 0.0, 1.0))
 
-            # greedily pick items maximizing MMR objective
             while len(selected) < min(cfg.retriever.top_k, len(base_idxs)):
                 best_i = None
                 best_val = -1e9
@@ -281,7 +258,6 @@ def retrieve(
                     if not selected:
                         val = sim_q[j]
                     else:
-                        # max similarity to already selected
                         smax = max((float(X[j] @ X[pos[si]]) for si in selected if si in pos), default=0.0)
                         val = lam * sim_q[j] - (1.0 - lam) * smax
                     if val > best_val:
@@ -293,7 +269,6 @@ def retrieve(
                 selected_set.add(best_i)
             cand_idxs = selected
         except Exception:
-            # fall back silently
             pass
 
     candidates = [chunks[i] for i in cand_idxs]
@@ -327,13 +302,9 @@ def answer(
     question: str,
     cfg: PipelineConfig,
 ) -> Dict[str, Any]:
-    """Run full RAG pipeline."""
     t0 = time.time()
     retrieved, timings = retrieve(index_dir, question, cfg)
 
-    # --- Prompt/context budget ---
-    # Many local chat models have a small context window (e.g. 2048). If we exceed it,
-    # generation quality degrades badly. We therefore cap the context by *tokens*.
     try:
         model, tokenizer, _device = load_llm(cfg.generator.model_id)
         window = (
@@ -341,7 +312,6 @@ def answer(
             or int(getattr(tokenizer, "model_max_length", 0) or 0)
             or 2048
         )
-        # Some tokenizers report a huge sentinel value; clamp to something sane.
         if window > 32768:
             window = 4096
         reserve = int(cfg.generator.max_new_tokens) + 96
@@ -349,7 +319,6 @@ def answer(
     except Exception:
         tokenizer = None
         max_input_tokens = None
-    # Context cap (chars + tokens)
     blocks: List[str] = []
     for i, rc in enumerate(retrieved, start=1):
         filename = rc.chunk.get("filename", "")
@@ -360,7 +329,6 @@ def answer(
         if len(candidate_context) > int(cfg.context.max_chars):
             break
 
-        # Token budget check: make sure the *full* prompt still fits.
         if tokenizer is not None and max_input_tokens is not None:
             candidate_prompt = build_prompt(
                 question=question,
@@ -372,7 +340,6 @@ def answer(
                 if n_tokens > int(max_input_tokens):
                     break
             except Exception:
-                # If token counting fails, fall back to char-based capping.
                 pass
 
         blocks.append(block)
@@ -396,7 +363,6 @@ def answer(
     tokens_out = int(gen.get("output_tokens", 0) or 0)
     timings["generate"] = time.time() - t2
 
-    # Guardrails: ensure citations exist if requested
     if cfg.guardrails.require_citations:
         import re
 
