@@ -13,8 +13,6 @@ from app.api.routes import router
 
 
 def create_app() -> FastAPI:
-    # Make HF downloads more reliable/consistent across runs.
-    # This helps avoid transient timeouts when downloading small models.
     try:
         data_dir = Path(settings.data_dir)
         hf_home = data_dir / "hf_home"
