@@ -20,7 +20,6 @@ def recursive_split(text: str, max_chars: int, separators: List[str]) -> List[st
     sep = separators[0] if separators else "\n"
     parts = text.split(sep) if sep else [text]
     if len(parts) == 1:
-        # cannot split further
         return [text[:max_chars], *recursive_split(text[max_chars:], max_chars, separators)]
 
     chunks: List[str] = []
