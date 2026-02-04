@@ -24,7 +24,6 @@ def load_llm(model_id: str):
         tokenizer.pad_token = tokenizer.eos_token
 
     kwargs = {}
-    # Use fp16 only on cuda
     if device == "cuda":
         kwargs.update(dict(torch_dtype=torch.float16, device_map="auto"))
     elif device == "mps":
@@ -38,10 +37,6 @@ def load_llm(model_id: str):
 
 
 def _context_window(model: Any, tokenizer: Any) -> int:
-    """Best-effort context window for a local HF model.
-
-    Many tokenizers report a huge sentinel for model_max_length. We clamp in that case.
-    """
     window = int(getattr(getattr(model, "config", None), "max_position_embeddings", 0) or 0)
     if not window:
         window = int(getattr(tokenizer, "model_max_length", 0) or 0)
@@ -53,10 +48,6 @@ def _context_window(model: Any, tokenizer: Any) -> int:
 
 
 def _split_system_user(prompt: str) -> Tuple[Optional[str], str]:
-    """Split a prompt built as: <system>\n\n<user>.
-
-    This keeps backwards compatibility with build_prompt().
-    """
     parts = prompt.split("\n\n", 1)
     if len(parts) == 2 and parts[0].strip() and parts[1].strip():
         return parts[0].strip(), parts[1].strip()
@@ -64,7 +55,6 @@ def _split_system_user(prompt: str) -> Tuple[Optional[str], str]:
 
 
 def _encode_with_chat_template(tokenizer, messages, max_length: int):
-    # Newer transformers support truncation/max_length directly.
     try:
         return tokenizer.apply_chat_template(
             messages,
@@ -74,7 +64,6 @@ def _encode_with_chat_template(tokenizer, messages, max_length: int):
             max_length=max_length,
         )
     except TypeError:
-        # Fallback: render to string and tokenize with truncation.
         rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         return tokenizer(rendered, return_tensors="pt", truncation=True, max_length=max_length)["input_ids"]
 
@@ -101,10 +90,8 @@ def generate_text(
 ) -> str:
     model, tokenizer, device = load_llm(model_id)
 
-    # Respect the model context window (leave space for generated tokens + template overhead)
     max_input_tokens = max(256, _context_window(model, tokenizer) - int(max_new_tokens) - 64)
 
-    # Use chat template if available
     if hasattr(tokenizer, "apply_chat_template") and "<|" not in prompt:
         sys, user = _split_system_user(prompt)
         messages = []
@@ -145,15 +132,10 @@ def generate_text_with_stats(
     max_new_tokens: int = 256,
     top_p: float = 0.9,
 ) -> Dict[str, int | str]:
-    """Generate text and return token counts.
-
-    This is useful for UI metrics. Cost is not computed here (local HF models).
-    """
     model, tokenizer, device = load_llm(model_id)
 
     max_input_tokens = max(256, _context_window(model, tokenizer) - int(max_new_tokens) - 64)
 
-    # tokenize
     if hasattr(tokenizer, "apply_chat_template") and "<|" not in prompt:
         sys, user = _split_system_user(prompt)
         messages = []
