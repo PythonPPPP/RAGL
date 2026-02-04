@@ -12,12 +12,10 @@ from app.rag.pipeline import PipelineConfig, answer
 
 
 def _cos(a: np.ndarray, b: np.ndarray) -> float:
-    # embeddings are normalized
     return float(np.dot(a, b))
 
 
 def _split_sentences(text: str) -> List[str]:
-    # lightweight sentence splitter
     raw = text.replace("\n", " ").strip()
     if not raw:
         return []
@@ -40,12 +38,10 @@ def score_one(
     cfg: PipelineConfig,
 ) -> Tuple[Dict[str, float], Dict[str, Any]]:
     idx_dir = Path(index_dir)
-    # Run pipeline
     t0 = time.time()
     out = answer(index_dir=idx_dir, question=question, cfg=cfg)
     latency = float(out["timings"]["total"])
 
-    # Compute metrics
     q_emb = embed_texts([question], cfg.embedding_model)[0]
     a_text = out["answer"]
     a_emb = embed_texts([a_text], cfg.embedding_model)[0]
@@ -55,15 +51,12 @@ def score_one(
     ctx_texts = [s["text"] for s in out["sources"]]
     if ctx_texts:
         c_embs = embed_texts(ctx_texts, cfg.embedding_model)
-        # Context precision: similarity of each retrieved chunk to the question
         sims = [max(0.0, min(1.0, float(np.dot(q_emb, c_embs[i])))) for i in range(len(ctx_texts))]
         ctx_precision = float(np.mean(sims))
 
-        # Context recall (proxy): similarity of answer to best chunk
         ans_to_ctx = [max(0.0, min(1.0, float(np.dot(a_emb, c_embs[i])))) for i in range(len(ctx_texts))]
         ctx_recall = float(np.max(ans_to_ctx))
 
-        # Faithfulness (proxy): sentence-wise support by any chunk
         sents = _split_sentences(a_text)
         if sents:
             s_embs = embed_texts(sents, cfg.embedding_model)
@@ -78,10 +71,8 @@ def score_one(
         ctx_recall = 0.0
         faith = 0.0
 
-    # Latency inverse (normalize with soft cap)
     latency_inv = 1.0 / (1.0 + latency)
 
-    # Composite score
     ragas_score = 0.35 * faith + 0.25 * rel + 0.2 * ctx_precision + 0.1 * ctx_recall + 0.1 * latency_inv
 
     def _finite01(x: float) -> float:
