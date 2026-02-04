@@ -13,11 +13,6 @@ _errors: Dict[str, str] = {}
 
 
 def submit(job_id: str, fn: Callable[[], Any]) -> None:
-    """Submit a background job.
-
-    - If a job with the same id is running, the call is a no-op.
-    - When completed, the return value is stored and can be retrieved via get_result().
-    """
     if job_id in _jobs and not _jobs[job_id].done():
         return
 
