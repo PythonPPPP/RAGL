@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 try:
-    import faiss  # type: ignore
-except Exception:  # pragma: no cover
+    import faiss  
+except Exception:  
     faiss = None
 import numpy as np
 from rank_bm25 import BM25Okapi
@@ -17,7 +17,6 @@ from app.rag.chunking import Chunk
 
 
 def _tokenize(text: str) -> List[str]:
-    """Very simple tokenization for BM25."""
     cleaned = "".join(ch.lower() if ch.isalnum() else " " for ch in text)
     tokens = [t for t in cleaned.split() if len(t) > 1]
     return tokens
@@ -29,16 +28,13 @@ def build_indexes(
     embeddings: np.ndarray,
     metadata: Dict,
 ) -> None:
-    """Persist FAISS dense index + BM25 index + chunk metadata."""
     index_dir.mkdir(parents=True, exist_ok=True)
 
     if embeddings.dtype != np.float32:
         embeddings = embeddings.astype(np.float32)
 
-    # Always persist raw embeddings for a portable fallback.
     np.save(str(index_dir / "embeddings.npy"), embeddings)
 
-    # Optional FAISS index (faster), if available.
     if faiss is not None:
         dim = embeddings.shape[1]
         faiss_index = faiss.IndexFlatIP(dim)
@@ -57,20 +53,16 @@ def build_indexes(
 
 
 def load_indexes(index_dir: Path):
-    """Load FAISS + BM25 + chunk metadata."""
-    # Always load raw embeddings (portable + required for MMR).
     emb_path = index_dir / "embeddings.npy"
     if not emb_path.exists():
         raise FileNotFoundError("No embeddings found. Rebuild the index.")
     embeddings = np.load(str(emb_path))
 
-    # Prefer FAISS if installed and index file exists.
     faiss_index = None
     dense_path = index_dir / "dense.index"
     if faiss is not None and dense_path.exists():
         faiss_index = faiss.read_index(str(dense_path))
     else:
-        # Fallback: use embeddings matrix for dense search.
         faiss_index = embeddings
     chunks = json.loads((index_dir / "chunks.json").read_text(encoding="utf-8"))
     meta = json.loads((index_dir / "meta.json").read_text(encoding="utf-8"))
@@ -87,12 +79,10 @@ def dense_search(
     if query_vec.ndim == 1:
         query_vec = query_vec.reshape(1, -1)
 
-    # FAISS path
     if hasattr(faiss_index, "search"):
         scores, idxs = faiss_index.search(query_vec.astype(np.float32), top_k)
         return idxs[0].tolist(), scores[0].tolist()
 
-    # Numpy fallback: embeddings @ query
     emb = np.asarray(faiss_index, dtype=np.float32)  # (N, D)
     q = query_vec.astype(np.float32)[0]
     scores = emb @ q
@@ -118,7 +108,7 @@ def hybrid_merge(
     sparse: Tuple[List[int], List[float]],
     alpha: float = 0.6,
 ) -> Tuple[List[int], List[float]]:
-    """Merge dense and sparse ranked lists with min-max normalization."""
+
     d_i, d_s = dense
     s_i, s_s = sparse
 
