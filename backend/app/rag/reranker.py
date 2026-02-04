@@ -15,5 +15,4 @@ def rerank(query: str, passages: List[str], model_name: str) -> List[float]:
     m = _get_reranker(model_name)
     pairs = [(query, p) for p in passages]
     scores = m.predict(pairs)
-    # convert to python floats
     return [float(s) for s in scores]
